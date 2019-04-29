@@ -5,6 +5,6 @@ int main() {
   fm::System<int> system;
   system.read(std::cin);
   system.print(std::cout);
-  system.printOA();
+  system.printOA(std::cout);
   return 0;
 }

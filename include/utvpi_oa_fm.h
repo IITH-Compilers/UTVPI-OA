@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <iostream>
+#include <map>
 #include <numeric>
 #include <sstream>
 #include <string>
@@ -15,7 +16,7 @@ struct Rational {
   T numerator;
   T denominator;
 
-  Rational(T n, T d) {
+  Rational(T n = 0, T d = 1) {
     numerator = n;
     denominator = d;
   }
@@ -149,6 +150,14 @@ struct Rational {
 };
 
 template <class T>
+struct VarBounds {
+  bool posMaxFound = false;
+  bool negMaxFound = false;
+  Rational<T> posMax;
+  Rational<T> negMax;
+};
+
+template <class T>
 struct System {
   std::vector<std::vector<Rational<T>>> lines;
   std::vector<std::string> varLabels;
@@ -169,6 +178,8 @@ struct System {
       in >> type;
       for (auto j = 0; j < nVars + 1; j++) {
         Rational<T> rat = Rational<T>::read(in);
+        // Changing + c >= 0 to  >= -c
+        if (j == nVars) rat = -rat;
         line.push_back(rat);
       }
       lines.push_back(line);
@@ -192,8 +203,17 @@ struct System {
     out << " c" << std::endl;
     for (auto &line : lines) {
       out << 1;
-      print_vector(line);
+      print_vector(out, line);
     }
+  }
+
+  static void print_vector(std::ostream &out,
+                           const std::vector<Rational<T>> &v) {
+    for (const Rational<T> &i : v) {
+      out << " ";
+      i.print(out);
+    }
+    out << std::endl;
   }
 
   System<T> removeVar(unsigned var) const {
@@ -213,6 +233,7 @@ struct System {
         Rational<T> c1 = lines[i][var];
         Rational<T> c2 = lines[j][var];
         auto line = vectorLinearSum(-c2, lines[i], c1, lines[j]);
+        assert(line[var] == Rational<T>(0));
         line.erase(line.begin() + var);
         bool all_zeros = true;
         for (auto &r : line) {
@@ -229,14 +250,6 @@ struct System {
     return res;
   }
 
-  static void print_vector(const std::vector<Rational<T>> &v) {
-    for (const Rational<T> &i : v) {
-      std::cout << " ";
-      i.print(std::cout);
-    }
-    std::cout << std::endl;
-  }
-
   static std::vector<Rational<T>> vectorLinearSum(Rational<T> a,
                                                   std::vector<Rational<T>> x,
                                                   Rational<T> b,
@@ -249,39 +262,75 @@ struct System {
     return res;
   }
 
-  static void printOA_f(const System<T> &system) {
+  static bool findOA_f(const System<T> &system, System<T> &result,
+                       std::map<std::string, unsigned> &varMap) {
     if (system.nVars == 2) {
-      print_bounds(system);
-      return;
+      return findBounds(system, result, varMap);
     }
-    printOA_f(system.removeVar(system.nVars - 1));
-    printOA_g(system.removeVar(system.nVars - 2));
-    printOA_h(system);
+    bool r = findOA_f(system.removeVar(system.nVars - 1), result, varMap);
+    if (!r) return false;
+    r = findOA_g(system.removeVar(system.nVars - 2), result, varMap);
+    if (!r) return false;
+    return findOA_h(system, result, varMap);
   }
 
-  static void printOA_g(const System<T> &system) {
+  static bool findOA_g(const System<T> &system, System<T> &result,
+                       std::map<std::string, unsigned> &varMap) {
     if (system.nVars == 2) {
-      print_bounds(system);
-      return;
+      return findBounds(system, result, varMap);
     }
-    printOA_g(system.removeVar(system.nVars - 1));
-    printOA_h(system);
+    bool r = findOA_g(system.removeVar(system.nVars - 2), result, varMap);
+    if (!r) return false;
+    return findOA_h(system, result, varMap);
   }
 
-  static void printOA_h(const System<T> &system) {
+  static bool findOA_h(const System<T> &system, System<T> &result,
+                       std::map<std::string, unsigned> &varMap) {
     if (system.nVars == 2) {
-      print_bounds(system);
-      return;
+      return findBounds(system, result, varMap);
     }
-    printOA_h(system.removeVar(0));
+    return findOA_h(system.removeVar(0), result, varMap);
   }
 
-  static void print_bounds(const System<T> &system) {
+  static bool findBounds(const System<T> &system, System<T> &result,
+                           std::map<std::string, unsigned> &varMap) {
     assert(system.nVars == 2);
-    auto s0 = system.removeVar(0);
-    simplifySingleVar(s0).print(std::cout);
-    auto s1 = system.removeVar(1);
-    simplifySingleVar(s1).print(std::cout);
+    auto res = simplifySingleVar(system.removeVar(1));
+    if (res.first) {
+      VarBounds<T> b = res.second;
+      if (b.posMaxFound) {
+        std::vector<Rational<T>> line(result.nVars + 1, 0);
+        line[varMap[system.varLabels[0]]] = Rational<T>(1);
+        line[result.nVars] = b.posMax;
+        result.lines.push_back(line);
+      }
+      if (b.negMaxFound) {
+        std::vector<Rational<T>> line(result.nVars + 1, 0);
+        line[varMap[system.varLabels[0]]] = Rational<T>(-1);
+        line[result.nVars] = b.negMax;
+        result.lines.push_back(line);
+      }
+    } else {
+      return false;
+    }
+    res = simplifySingleVar(system.removeVar(0));
+    if (res.first) {
+      VarBounds<T> b = res.second;
+      if (b.posMaxFound) {
+        std::vector<Rational<T>> line(result.nVars + 1, 0);
+        line[varMap[system.varLabels[1]]] = Rational<T>(1);
+        line[result.nVars] = b.posMax;
+        result.lines.push_back(line);
+      }
+      if (b.negMaxFound) {
+        std::vector<Rational<T>> line(result.nVars + 1, 0);
+        line[varMap[system.varLabels[1]]] = Rational<T>(-1);
+        line[result.nVars] = b.negMax;
+        result.lines.push_back(line);
+      }
+    } else {
+      return false;
+    }
     System<T> rotated = system;
     rotated.varLabels[0] = system.varLabels[0] + "+" + system.varLabels[1];
     rotated.varLabels[1] = system.varLabels[0] + "-" + system.varLabels[1];
@@ -290,59 +339,92 @@ struct System {
       rotated.lines[i][1] = system.lines[i][0] - system.lines[i][1];
       rotated.lines[i][2] = system.lines[i][2] * Rational<T>(2, 1);
     }
-    simplifySingleVar(rotated.removeVar(1)).print(std::cout);
-    simplifySingleVar(rotated.removeVar(0)).print(std::cout);
+    res = simplifySingleVar(rotated.removeVar(1));
+    if (res.first) {
+      VarBounds<T> b = res.second;
+      if (b.posMaxFound) {
+        std::vector<Rational<T>> line(result.nVars + 1, 0);
+        line[varMap[system.varLabels[0]]] = Rational<T>(1);
+        line[varMap[system.varLabels[1]]] = Rational<T>(1);
+        line[result.nVars] = b.posMax;
+        result.lines.push_back(line);
+      }
+      if (b.negMaxFound) {
+        std::vector<Rational<T>> line(result.nVars + 1, 0);
+        line[varMap[system.varLabels[0]]] = Rational<T>(-1);
+        line[varMap[system.varLabels[1]]] = Rational<T>(-1);
+        line[result.nVars] = b.negMax;
+        result.lines.push_back(line);
+      }
+    } else {
+      return false;
+    }
+    res = simplifySingleVar(rotated.removeVar(0));
+    if (res.first) {
+      VarBounds<T> b = res.second;
+      if (b.posMaxFound) {
+        std::vector<Rational<T>> line(result.nVars + 1, 0);
+        line[varMap[system.varLabels[0]]] = Rational<T>(1);
+        line[varMap[system.varLabels[1]]] = Rational<T>(-1);
+        line[result.nVars] = b.posMax;
+        result.lines.push_back(line);
+      }
+      if (b.negMaxFound) {
+        std::vector<Rational<T>> line(result.nVars + 1, 0);
+        line[varMap[system.varLabels[0]]] = Rational<T>(-1);
+        line[varMap[system.varLabels[1]]] = Rational<T>(1);
+        line[result.nVars] = b.negMax;
+        result.lines.push_back(line);
+      }
+    } else {
+      return false;
+    }
+    return true;
   }
 
-  static System<T> simplifySingleVar(const System<T> &system) {
+  static std::pair<bool, VarBounds<T>> simplifySingleVar(
+      const System<T> &system) {
     assert(system.nVars == 1);
-    bool pos_max_found = false;
-    Rational<T> pos_max(0, 1);
-    bool neg_max_found = false;
-    Rational<T> neg_max(0, 1);
+    VarBounds<T> varBounds;
     for (auto &line : system.lines) {
       if (line[0] > 0) {
         auto val = line[1] / line[0];
-        if (pos_max_found && pos_max > val) {
-          pos_max = val;
-        } else {
-          pos_max_found = true;
-          pos_max = val;
+        if (varBounds.posMaxFound && varBounds.posMax > val) {
+          varBounds.posMax = val;
+        } else if (!varBounds.posMaxFound) {
+          varBounds.posMaxFound = true;
+          varBounds.posMax = val;
         }
       } else if (line[0] < 0) {
         auto val = line[1] / (-line[0]);
-        if (neg_max_found && neg_max > val) {
-          neg_max = val;
-        } else {
-          neg_max_found = true;
-          neg_max = val;
+        if (varBounds.negMaxFound && varBounds.negMax > val) {
+          varBounds.negMax = val;
+        } else  if (!varBounds.negMaxFound){
+          varBounds.negMaxFound = true;
+          varBounds.negMax = val;
         }
       } else if (line[1] > 0) {
-        std::cout << "Infeasible" << std::endl;
-        return System<T>();
+        return std::make_pair(false, varBounds);
       }
     }
-
-    System<T> res;
-    res.nVars = 1;
-    res.varLabels = system.varLabels;
-    if (pos_max_found) {
-      std::vector<Rational<T>> line;
-      line.push_back(Rational<T>(1, 1));
-      line.push_back(pos_max);
-      res.lines.push_back(line);
-    }
-    if (neg_max_found) {
-      std::vector<Rational<T>> line;
-      line.push_back(Rational<T>(-1, 1));
-      line.push_back(neg_max);
-      res.lines.push_back(line);
-    }
-    res.nLines = res.lines.size();
-    return res;
+    return std::make_pair(true, varBounds);
   }
 
-  void printOA() { printOA_f(*this); }
+  void printOA(std::ostream &out) {
+    System<T> result;
+    result.varLabels = varLabels;
+    result.nVars = nVars;
+    std::map<std::string, unsigned> varMap;
+    for (auto i = 0; i < nVars; i++) {
+      varMap[varLabels[i]] = i;
+    }
+    bool r = findOA_f(*this, result, varMap);
+    if (!r) {
+      out << "Infeasible!" << std::endl;
+    } else {
+      result.print(out);
+    }
+  }
 };
 
 }  // namespace fm
