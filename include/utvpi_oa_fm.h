@@ -52,7 +52,7 @@ struct Rational {
     }
   }
 
-  Rational<T> operator-() {
+  Rational<T> operator-() const {
     Rational<T> rat(-numerator, denominator);
     return rat;
   }
@@ -63,7 +63,7 @@ struct Rational {
     return *this;
   }
 
-  Rational<T> operator+(const Rational<T> &other) {
+  Rational<T> operator+(const Rational<T> &other) const {
     Rational<T> rat(0, 1);
     T lcm = std::lcm(denominator, other.denominator);
     rat.denominator = lcm;
@@ -75,14 +75,16 @@ struct Rational {
     return rat;
   }
 
-  Rational<T> operator-(const Rational<T> &other) { return *this + (-other); }
+  Rational<T> operator-(const Rational<T> &other) const {
+    return *this + (-other);
+  }
 
-  Rational<T> reciprocal() {
+  Rational<T> reciprocal() const {
     Rational<T> rat(denominator, numerator);
     return rat;
   }
 
-  Rational<T> operator*(const Rational<T> &other) {
+  Rational<T> operator*(const Rational<T> &other) const {
     Rational<T> rat(numerator * other.numerator,
                     denominator * other.denominator);
     T gcd = std::gcd(rat.numerator, rat.denominator);
@@ -91,17 +93,17 @@ struct Rational {
     return rat;
   }
 
-  Rational<T> operator/(const Rational<T> &other) {
+  Rational<T> operator/(const Rational<T> &other) const {
     return *this * other.reciprocal();
   }
 
-  bool operator==(const Rational<T> &other) {
+  bool operator==(const Rational<T> &other) const {
     return numerator * other.denominator == other.numerator * denominator;
   }
 
-  bool operator==(const T &other) { return *this == Rational(other, 1); }
+  bool operator==(const T &other) const { return *this == Rational(other, 1); }
 
-  bool operator<=(const Rational<T> &other) {
+  bool operator<=(const Rational<T> &other) const {
     if (denominator > 0 && other.denominator > 0)
       return numerator * other.denominator <= other.numerator * denominator;
     else {
@@ -109,9 +111,9 @@ struct Rational {
     }
   }
 
-  bool operator<=(const T &other) { return *this <= Rational(other, 1); }
+  bool operator<=(const T &other) const { return *this <= Rational(other, 1); }
 
-  bool operator<(const Rational<T> &other) {
+  bool operator<(const Rational<T> &other) const {
     if (denominator > 0 && other.denominator > 0)
       return numerator * other.denominator < other.numerator * denominator;
     else {
@@ -119,9 +121,9 @@ struct Rational {
     }
   }
 
-  bool operator<(const T &other) { return *this < Rational(other, 1); }
+  bool operator<(const T &other) const { return *this < Rational(other, 1); }
 
-  bool operator>=(const Rational<T> &other) {
+  bool operator>=(const Rational<T> &other) const {
     if (denominator > 0 && other.denominator > 0)
       return numerator * other.denominator >= other.numerator * denominator;
     else {
@@ -129,9 +131,9 @@ struct Rational {
     }
   }
 
-  bool operator>=(const T &other) { return *this >= Rational(other, 1); }
+  bool operator>=(const T &other) const { return *this >= Rational(other, 1); }
 
-  bool operator>(const Rational<T> &other) {
+  bool operator>(const Rational<T> &other) const {
     if (denominator > 0 && other.denominator > 0)
       return numerator * other.denominator > other.numerator * denominator;
     else {
@@ -139,7 +141,7 @@ struct Rational {
     }
   }
 
-  bool operator>(const T &other) { return *this > Rational(other, 1); }
+  bool operator>(const T &other) const { return *this > Rational(other, 1); }
 };
 
 template <class T>
@@ -178,7 +180,7 @@ struct System {
     nLines = lines.size();
   }
 
-  void print(std::ostream &out) {
+  void print(std::ostream &out) const {
     for (auto &var : varLabels) {
       out << " " << var;
     }
@@ -189,7 +191,7 @@ struct System {
     }
   }
 
-  System<T> removeVar(unsigned var) {
+  System<T> removeVar(unsigned var) const {
     System<T> res;
     res.varLabels = varLabels;
     res.varLabels.erase(res.varLabels.begin() + var);
@@ -235,7 +237,34 @@ struct System {
     return res;
   }
 
-  System<T> findOA() {}
+  static void printOA_f(const System<T> &system) {
+    if (system.nVars == 2) {
+      system.print(std::cout);
+      return;
+    }
+    printOA_f(system.removeVar(system.nVars - 1));
+    printOA_g(system.removeVar(system.nVars - 2));
+    printOA_h(system);
+  }
+
+  static void printOA_g(const System<T> &system) {
+    if (system.nVars == 2) {
+      system.print(std::cout);
+      return;
+    }
+    printOA_g(system.removeVar(system.nVars-1));
+    printOA_h(system);
+  }
+
+  static void printOA_h(const System<T> &system) {
+    if (system.nVars == 2) {
+      system.print(std::cout);
+      return;
+    }
+    printOA_h(system.removeVar(0));
+  }
+
+  void printOA() { printOA_f(*this); }
 };
 
 }  // namespace fm
