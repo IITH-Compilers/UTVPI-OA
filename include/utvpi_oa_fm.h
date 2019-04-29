@@ -103,6 +103,10 @@ struct Rational {
 
   bool operator==(const T &other) const { return *this == Rational(other, 1); }
 
+  bool operator!=(const Rational<T> &other) const { return !(*this == other); }
+
+  bool operator!=(const T &other) const { return !(*this == other); }
+
   bool operator<=(const Rational<T> &other) const {
     if (denominator > 0 && other.denominator > 0)
       return numerator * other.denominator <= other.numerator * denominator;
@@ -181,6 +185,7 @@ struct System {
   }
 
   void print(std::ostream &out) const {
+    if (lines.size() == 0) return;
     for (auto &var : varLabels) {
       out << " " << var;
     }
@@ -209,7 +214,14 @@ struct System {
         Rational<T> c2 = lines[j][var];
         auto line = vectorLinearSum(-c2, lines[i], c1, lines[j]);
         line.erase(line.begin() + var);
-        res.lines.push_back(line);
+        bool all_zeros = true;
+        for (auto &r : line) {
+          if (r != Rational<T>(0, 1)) {
+            all_zeros = false;
+            break;
+          }
+        }
+        if (!all_zeros) res.lines.push_back(line);
       }
     }
     res.nVars = nVars - 1;
@@ -239,7 +251,7 @@ struct System {
 
   static void printOA_f(const System<T> &system) {
     if (system.nVars == 2) {
-      system.print(std::cout);
+      print_bounds(system);
       return;
     }
     printOA_f(system.removeVar(system.nVars - 1));
@@ -249,19 +261,37 @@ struct System {
 
   static void printOA_g(const System<T> &system) {
     if (system.nVars == 2) {
-      system.print(std::cout);
+      print_bounds(system);
       return;
     }
-    printOA_g(system.removeVar(system.nVars-1));
+    printOA_g(system.removeVar(system.nVars - 1));
     printOA_h(system);
   }
 
   static void printOA_h(const System<T> &system) {
     if (system.nVars == 2) {
-      system.print(std::cout);
+      print_bounds(system);
       return;
     }
     printOA_h(system.removeVar(0));
+  }
+
+  static void print_bounds(const System<T> &system) {
+    assert(system.nVars == 2);
+    auto s0 = system.removeVar(0);
+    s0.print(std::cout);
+    auto s1 = system.removeVar(1);
+    s1.print(std::cout);
+    System<T> rotated = system;
+    rotated.varLabels[0] = system.varLabels[0] + "+" + system.varLabels[1];
+    rotated.varLabels[1] = system.varLabels[0] + "-" + system.varLabels[1];
+    for (auto i = 0; i < system.nLines; i++) {
+      rotated.lines[i][0] = system.lines[i][0] + system.lines[i][1];
+      rotated.lines[i][1] = system.lines[i][0] - system.lines[i][1];
+      rotated.lines[i][2] = system.lines[i][2] * Rational<T>(2, 1);
+    }
+    rotated.removeVar(1).print(std::cout);
+    rotated.removeVar(0).print(std::cout);
   }
 
   void printOA() { printOA_f(*this); }
