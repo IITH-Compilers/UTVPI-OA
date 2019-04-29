@@ -237,6 +237,7 @@ struct System {
         Rational<T> c2 = lines[j][var];
         auto line = vectorLinearSum(-c2, lines[i], c1, lines[j]);
         assert(line[var] == Rational<T>(0));
+        assert(line.size() == nVars + 1);
         line.erase(line.begin() + var);
         bool all_zeros = true;
         for (auto &r : line) {
@@ -438,9 +439,11 @@ struct System {
     for (auto i = 0; i < system.nVars; i++) {
       for (auto j = i + 1; j < system.nVars; j++) {
         System<T> temp = system;
+        unsigned nRemoved = 0;
         for (int k = 0; k < system.nVars; k++) {
           if (k != i && k != j) {
-            temp = temp.removeVar(k);
+            temp = temp.removeVar(k-nRemoved);
+            nRemoved++;
           }
         }
         bool r = findBounds(temp, result, varMap);
