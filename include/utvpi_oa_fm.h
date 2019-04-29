@@ -121,9 +121,8 @@ struct Rational {
   bool operator<(const Rational<T> &other) const {
     if (denominator > 0 && other.denominator > 0)
       return numerator * other.denominator < other.numerator * denominator;
-    else {
-      assert(false);
-    }
+    assert(false);
+    return false;
   }
 
   bool operator<(const T &other) const { return *this < Rational(other, 1); }
@@ -131,9 +130,8 @@ struct Rational {
   bool operator>=(const Rational<T> &other) const {
     if (denominator > 0 && other.denominator > 0)
       return numerator * other.denominator >= other.numerator * denominator;
-    else {
-      assert(false);
-    }
+    assert(false);
+    return false;
   }
 
   bool operator>=(const T &other) const { return *this >= Rational(other, 1); }
@@ -141,9 +139,8 @@ struct Rational {
   bool operator>(const Rational<T> &other) const {
     if (denominator > 0 && other.denominator > 0)
       return numerator * other.denominator > other.numerator * denominator;
-    else {
-      assert(false);
-    }
+    assert(false);
+    return false;
   }
 
   bool operator>(const T &other) const { return *this > Rational(other, 1); }
