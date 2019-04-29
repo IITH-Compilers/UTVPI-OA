@@ -279,9 +279,9 @@ struct System {
   static void print_bounds(const System<T> &system) {
     assert(system.nVars == 2);
     auto s0 = system.removeVar(0);
-    s0.print(std::cout);
+    simplifySingleVar(s0).print(std::cout);
     auto s1 = system.removeVar(1);
-    s1.print(std::cout);
+    simplifySingleVar(s1).print(std::cout);
     System<T> rotated = system;
     rotated.varLabels[0] = system.varLabels[0] + "+" + system.varLabels[1];
     rotated.varLabels[1] = system.varLabels[0] + "-" + system.varLabels[1];
@@ -290,8 +290,56 @@ struct System {
       rotated.lines[i][1] = system.lines[i][0] - system.lines[i][1];
       rotated.lines[i][2] = system.lines[i][2] * Rational<T>(2, 1);
     }
-    rotated.removeVar(1).print(std::cout);
-    rotated.removeVar(0).print(std::cout);
+    simplifySingleVar(rotated.removeVar(1)).print(std::cout);
+    simplifySingleVar(rotated.removeVar(0)).print(std::cout);
+  }
+
+  static System<T> simplifySingleVar(const System<T> &system) {
+    assert(system.nVars == 1);
+    bool pos_max_found = false;
+    Rational<T> pos_max(0, 1);
+    bool neg_max_found = false;
+    Rational<T> neg_max(0, 1);
+    for (auto &line : system.lines) {
+      if (line[0] > 0) {
+        auto val = line[1] / line[0];
+        if (pos_max_found && pos_max > val) {
+          pos_max = val;
+        } else {
+          pos_max_found = true;
+          pos_max = val;
+        }
+      } else if (line[0] < 0) {
+        auto val = line[1] / (-line[0]);
+        if (neg_max_found && neg_max > val) {
+          neg_max = val;
+        } else {
+          neg_max_found = true;
+          neg_max = val;
+        }
+      } else if (line[1] > 0) {
+        std::cout << "Infeasible" << std::endl;
+        return System<T>();
+      }
+    }
+
+    System<T> res;
+    res.nVars = 1;
+    res.varLabels = system.varLabels;
+    if (pos_max_found) {
+      std::vector<Rational<T>> line;
+      line.push_back(Rational<T>(1, 1));
+      line.push_back(pos_max);
+      res.lines.push_back(line);
+    }
+    if (neg_max_found) {
+      std::vector<Rational<T>> line;
+      line.push_back(Rational<T>(-1, 1));
+      line.push_back(neg_max);
+      res.lines.push_back(line);
+    }
+    res.nLines = res.lines.size();
+    return res;
   }
 
   void printOA() { printOA_f(*this); }
