@@ -164,7 +164,7 @@ struct System {
   unsigned nVars = 0, nLines = 0;
 
   void read(std::istream &in) {
-    in >> nVars >> nLines;
+    in >> nLines >> nVars;
     nVars = nVars - 2;
     int type;
     T temp;
@@ -209,9 +209,12 @@ struct System {
 
   static void print_vector(std::ostream &out,
                            const std::vector<Rational<T>> &v) {
-    for (const Rational<T> &i : v) {
+    for (auto i = 0; i < v.size(); i++) {
       out << " ";
-      i.print(out);
+      if (i + 1 == v.size())
+        (-v[i]).print(out);
+      else
+        v[i].print(out);
     }
     out << std::endl;
   }
@@ -293,7 +296,7 @@ struct System {
   }
 
   static bool findBounds(const System<T> &system, System<T> &result,
-                           std::map<std::string, unsigned> &varMap) {
+                         std::map<std::string, unsigned> &varMap) {
     assert(system.nVars == 2);
     auto res = simplifySingleVar(system.removeVar(1));
     if (res.first) {
@@ -399,7 +402,7 @@ struct System {
         auto val = line[1] / (-line[0]);
         if (varBounds.negMaxFound && varBounds.negMax > val) {
           varBounds.negMax = val;
-        } else  if (!varBounds.negMaxFound){
+        } else if (!varBounds.negMaxFound) {
           varBounds.negMaxFound = true;
           varBounds.negMax = val;
         }
@@ -410,7 +413,7 @@ struct System {
     return std::make_pair(true, varBounds);
   }
 
-  void printOA(std::ostream &out) {
+  void printOA(std::ostream &out, bool vanilla = false) {
     System<T> result;
     result.varLabels = varLabels;
     result.nVars = nVars;
@@ -418,12 +421,35 @@ struct System {
     for (auto i = 0; i < nVars; i++) {
       varMap[varLabels[i]] = i;
     }
-    bool r = findOA_f(*this, result, varMap);
+    bool r;
+    if (vanilla)
+      r = vanillaFMOA(*this, result, varMap);
+    else
+      r = findOA_f(*this, result, varMap);
     if (!r) {
       out << "Infeasible!" << std::endl;
     } else {
       result.print(out);
     }
+  }
+
+  static bool vanillaFMOA(const System<T> &system, System<T> &result,
+                          std::map<std::string, unsigned> varMap) {
+    for (auto i = 0; i < system.nVars; i++) {
+      for (auto j = i + 1; j < system.nVars; j++) {
+        System<T> temp = system;
+        for (int k = 0; k < system.nVars; k++) {
+          if (k != i && k != j) {
+            temp = temp.removeVar(k);
+          }
+        }
+        bool r = findBounds(temp, result, varMap);
+        if (!r) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 };
 
