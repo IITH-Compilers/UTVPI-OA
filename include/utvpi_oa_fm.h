@@ -9,8 +9,13 @@
 #include <string>
 #include <vector>
 
+#include <ilcplex/ilocplex.h>
+
 namespace fm {
 
+/**
+ * Rational number
+ */
 template <class T>
 struct Rational {
   T numerator;
@@ -155,6 +160,18 @@ struct VarBounds {
 };
 
 template <class T>
+void makeDenominatorsOne(std::vector<Rational<T>> &line) {
+  T l = 1;
+  for (auto &rat : line) {
+    l = std::lcm(l, rat.denominator);
+  }
+  for (unsigned i = 0; i < line.size(); i++) {
+    line[i].numerator = (line[i].numerator * l) / line[i].denominator;
+    line[i].denominator = 1;
+  }
+}
+
+template <class T>
 struct System {
   std::vector<std::vector<Rational<T>>> lines;
   std::vector<std::string> varLabels;
@@ -164,16 +181,15 @@ struct System {
     in >> nLines >> nVars;
     nVars = nVars - 2;
     int type;
-    T temp;
 
-    for (auto i = 0; i < nVars; i++) {
+    for (unsigned i = 0; i < nVars; i++) {
       varLabels.push_back("x[" + std::to_string(i) + "]");
     }
 
-    for (auto i = 0; i < nLines; i++) {
+    for (unsigned i = 0; i < nLines; i++) {
       std::vector<Rational<T>> line;
       in >> type;
-      for (auto j = 0; j < nVars + 1; j++) {
+      for (unsigned j = 0; j < nVars + 1; j++) {
         Rational<T> rat = Rational<T>::read(in);
         // Changing + c >= 0 to  >= -c
         if (j == nVars) rat = -rat;
@@ -182,7 +198,7 @@ struct System {
       lines.push_back(line);
       if (type == 0) {
         std::vector<Rational<T>> line2 = line;
-        for (auto j = 0; j < nVars + 1; j++) {
+        for (unsigned j = 0; j < nVars + 1; j++) {
           line2[j] = -line2[j];
         }
         lines.push_back(line2);
@@ -190,6 +206,12 @@ struct System {
     }
 
     nLines = lines.size();
+
+    for (auto &line : lines) {
+      makeDenominatorsOne(line);
+    }
+
+    print(std::cout);
   }
 
   void print(std::ostream &out) const {
@@ -206,7 +228,7 @@ struct System {
 
   static void print_vector(std::ostream &out,
                            const std::vector<Rational<T>> &v) {
-    for (auto i = 0; i < v.size(); i++) {
+    for (unsigned i = 0; i < v.size(); i++) {
       out << " ";
       if (i + 1 == v.size())
         (-v[i]).print(out);
@@ -216,11 +238,11 @@ struct System {
     out << std::endl;
   }
 
-  System<T> removeVar(unsigned var) const {
+  System<T> removeVar(unsigned var, bool remove_redundant = true) const {
     System<T> res;
     res.varLabels = varLabels;
     res.varLabels.erase(res.varLabels.begin() + var);
-    for (auto i = 0; i < nLines; i++) {
+    for (unsigned i = 0; i < nLines; i++) {
       if (lines[i][var] == 0) {
         auto line = lines[i];
         line.erase(line.begin() + var);
@@ -228,7 +250,7 @@ struct System {
         continue;
       }
       if (lines[i][var] < 0) continue;
-      for (auto j = 0; j < nLines; j++) {
+      for (unsigned j = 0; j < nLines; j++) {
         if (lines[j][var] >= 0 || i == j) continue;
         Rational<T> c1 = lines[i][var];
         Rational<T> c2 = lines[j][var];
@@ -248,7 +270,36 @@ struct System {
     }
     res.nVars = nVars - 1;
     res.nLines = res.lines.size();
+    if (remove_redundant) res.removeRedundantConstraints();
     return res;
+  }
+
+  void removeRedundantConstraints() {
+    IloEnv env;
+    IloModel model(env);
+    IloNumVarArray vars(env);
+    vars.add(IloNumVar(env, 0, IloInfinity, "x1"));
+    vars.add(IloNumVar(env, 0, IloInfinity, "x2"));
+    vars.add(IloNumVar(env, 0, IloInfinity, "x3"));
+
+    model.add(IloMaximize(env, 6 * vars[0] + 14 * vars[1] + 13 * vars[2]));
+    model.add(0.5 * vars[0] + 2 * vars[1] + vars[2] <= 24);
+    model.add(vars[0] - 2 * vars[1] + 4 * vars[2] <= 60);
+
+    IloCplex cplex(model);
+
+    if (cplex.solve()) {
+      std::cout << cplex.isPrimalFeasible() << std::endl;
+      IloNumArray vals(env);
+      env.out() << "Solution status = " << cplex.getStatus() << std::endl;
+      env.out() << "Solution value = " << cplex.getObjValue() << std::endl;
+      cplex.getValues(vals, vars);
+      env.out() << "Values = " << vals << std::endl;
+    } else {
+      std::cout << cplex.isPrimalFeasible() << std::endl;
+      std::cout << "Not solved" << std::endl;
+    }
+    env.end();
   }
 
   static std::vector<Rational<T>> vectorLinearSum(Rational<T> a,
@@ -257,7 +308,7 @@ struct System {
                                                   std::vector<Rational<T>> y) {
     assert(x.size() == y.size());
     auto res = x;
-    for (auto i = 0; i < res.size(); i++) {
+    for (unsigned i = 0; i < res.size(); i++) {
       res[i] = a * x[i] + b * y[i];
     }
     return res;
@@ -335,7 +386,7 @@ struct System {
     System<T> rotated = system;
     rotated.varLabels[0] = system.varLabels[0] + "+" + system.varLabels[1];
     rotated.varLabels[1] = system.varLabels[0] + "-" + system.varLabels[1];
-    for (auto i = 0; i < system.nLines; i++) {
+    for (unsigned i = 0; i < system.nLines; i++) {
       rotated.lines[i][0] = system.lines[i][0] + system.lines[i][1];
       rotated.lines[i][1] = system.lines[i][0] - system.lines[i][1];
       rotated.lines[i][2] = system.lines[i][2] * Rational<T>(2, 1);
@@ -416,7 +467,7 @@ struct System {
     result.varLabels = varLabels;
     result.nVars = nVars;
     std::map<std::string, unsigned> varMap;
-    for (auto i = 0; i < nVars; i++) {
+    for (unsigned i = 0; i < nVars; i++) {
       varMap[varLabels[i]] = i;
     }
     bool r;
@@ -433,13 +484,13 @@ struct System {
 
   static bool vanillaFMOA(const System<T> &system, System<T> &result,
                           std::map<std::string, unsigned> varMap) {
-    for (auto i = 0; i < system.nVars; i++) {
-      for (auto j = i + 1; j < system.nVars; j++) {
+    for (unsigned i = 0; i < system.nVars; i++) {
+      for (unsigned j = i + 1; j < system.nVars; j++) {
         System<T> temp = system;
         unsigned nRemoved = 0;
-        for (int k = 0; k < system.nVars; k++) {
+        for (unsigned k = 0; k < system.nVars; k++) {
           if (k != i && k != j) {
-            temp = temp.removeVar(k-nRemoved);
+            temp = temp.removeVar(k - nRemoved);
             nRemoved++;
           }
         }
