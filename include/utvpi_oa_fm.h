@@ -165,9 +165,9 @@ void makeDenominatorsOne(std::vector<Rational<T>> &line) {
   for (auto &rat : line) {
     l = std::lcm(l, rat.denominator);
   }
-  for (unsigned i = 0; i < line.size(); i++) {
-    line[i].numerator = (line[i].numerator * l) / line[i].denominator;
-    line[i].denominator = 1;
+  for (auto &rat : line) {
+    rat.numerator = (rat.numerator * l) / rat.denominator;
+    rat.denominator = 1;
   }
 }
 
@@ -210,8 +210,6 @@ struct System {
     for (auto &line : lines) {
       makeDenominatorsOne(line);
     }
-
-    print(std::cout);
   }
 
   void print(std::ostream &out) const {
@@ -275,31 +273,37 @@ struct System {
   }
 
   void removeRedundantConstraints() {
-    IloEnv env;
-    IloModel model(env);
-    IloNumVarArray vars(env);
-    vars.add(IloNumVar(env, 0, IloInfinity, "x1"));
-    vars.add(IloNumVar(env, 0, IloInfinity, "x2"));
-    vars.add(IloNumVar(env, 0, IloInfinity, "x3"));
+    for (unsigned i = 0; i < lines.size(); i++) {
+      IloEnv env;
+      IloModel model(env);
+      IloNumVarArray vars(env);
+      for (unsigned j = 0; j < nVars; j++) {
+        vars.add(IloNumVar(env, -IloInfinity, IloInfinity));
+      }
+      for (unsigned j = 0; j < lines.size(); j++) {
+        int sign = (i == j) ? -1 : 1;
+        IloExpr expr(env);
+        for (unsigned k = 0; k < nVars; k++) {
+          double coeff = sign * double(lines[j][k].numerator) /
+                         double(lines[j][k].denominator);
+          expr += coeff * vars[k];
+        }
+        double rhs = sign * double(lines[j][nVars].numerator) /
+                     double(lines[j][nVars].denominator);
+        model.add(expr >= rhs);
+      }
+      IloCplex cplex(model);
+      cplex.setOut(env.getNullStream());
 
-    model.add(IloMaximize(env, 6 * vars[0] + 14 * vars[1] + 13 * vars[2]));
-    model.add(0.5 * vars[0] + 2 * vars[1] + vars[2] <= 24);
-    model.add(vars[0] - 2 * vars[1] + 4 * vars[2] <= 60);
-
-    IloCplex cplex(model);
-
-    if (cplex.solve()) {
-      std::cout << cplex.isPrimalFeasible() << std::endl;
-      IloNumArray vals(env);
-      env.out() << "Solution status = " << cplex.getStatus() << std::endl;
-      env.out() << "Solution value = " << cplex.getObjValue() << std::endl;
-      cplex.getValues(vals, vars);
-      env.out() << "Values = " << vals << std::endl;
-    } else {
-      std::cout << cplex.isPrimalFeasible() << std::endl;
-      std::cout << "Not solved" << std::endl;
+      cplex.solve();
+      if (cplex.getStatus() == IloAlgorithm::Infeasible) {
+        lines.erase(lines.begin() + i);
+        i--;
+      }
+      env.end();
     }
-    env.end();
+
+    nLines = lines.size();
   }
 
   static std::vector<Rational<T>> vectorLinearSum(Rational<T> a,
