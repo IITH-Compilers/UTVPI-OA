@@ -2,6 +2,7 @@
 #define UTVPI_OA_FM_H
 
 #include <cassert>
+#include <cmath>
 #include <iostream>
 #include <map>
 #include <numeric>
@@ -24,11 +25,25 @@ struct Rational {
   Rational(T n = 0, T d = 1) {
     numerator = n;
     denominator = d;
+    simplify();
   }
 
   Rational(const Rational<T> &r) {
     numerator = r.numerator;
     denominator = r.denominator;
+    simplify();
+  }
+
+  void simplify() {
+    if (denominator == 0) {
+      assert(false);
+    }
+    if (numerator == 0) {
+      denominator = 1;
+    }
+    T g = std::gcd(numerator, denominator);
+    numerator /= g;
+    denominator /= g;
   }
 
   static Rational<T> read(std::istream &in) {
@@ -542,11 +557,19 @@ struct System {
                    double(line[system.nVars].denominator);
       model.add(expr >= rhs);
     }
-    IloObjective obj = IloMaximize(env, vars[0]);
-    model.add(obj);
 
     IloCplex cplex(model);
     cplex.setOut(env.getNullStream());
+
+    cplex.extract(model);
+    cplex.solve();
+
+    if (cplex.getStatus() == IloAlgorithm::Infeasible) {
+      return false;
+    }
+
+    IloObjective obj = IloMaximize(env, vars[0]);
+    model.add(obj);
     for (unsigned i = 0; i < system.nVars; i++) {
       for (unsigned j = 0; j < system.nVars; j++) {
         if (i == j) {
@@ -561,7 +584,7 @@ struct System {
       if (cplex.getStatus() == IloAlgorithm::Optimal) {
         std::vector<Rational<T>> line(system.nVars + 1, 0);
         line[i] = 1;
-        line[system.nVars] = Rational<T>(T(cplex.getObjValue()));
+        line[system.nVars] = -ceilNum(cplex.getObjValue());
         result.lines.push_back(line);
       }
 
@@ -572,13 +595,13 @@ struct System {
       if (cplex.getStatus() == IloAlgorithm::Optimal) {
         std::vector<Rational<T>> line(system.nVars + 1, 0);
         line[i] = -1;
-        line[system.nVars] = Rational<T>(T(cplex.getObjValue()));
+        line[system.nVars] = -ceilNum(cplex.getObjValue());
         result.lines.push_back(line);
       }
     }
 
     for (unsigned i = 0; i < system.nVars; i++) {
-      for (unsigned j = i+1; j < system.nVars; j++) {
+      for (unsigned j = i + 1; j < system.nVars; j++) {
         for (unsigned k = 0; k < system.nVars; k++) {
           if (k == i || k == j) {
             obj.setLinearCoef(vars[k], -1);
@@ -593,7 +616,7 @@ struct System {
           std::vector<Rational<T>> line(system.nVars + 1, 0);
           line[i] = 1;
           line[j] = 1;
-          line[system.nVars] = Rational<T>(T(cplex.getObjValue()));
+          line[system.nVars] = -ceilNum(cplex.getObjValue());
           result.lines.push_back(line);
         }
 
@@ -606,7 +629,7 @@ struct System {
           std::vector<Rational<T>> line(system.nVars + 1, 0);
           line[i] = -1;
           line[j] = -1;
-          line[system.nVars] = Rational<T>(T(cplex.getObjValue()));
+          line[system.nVars] = -ceilNum(cplex.getObjValue());
           result.lines.push_back(line);
         }
 
@@ -619,7 +642,7 @@ struct System {
           std::vector<Rational<T>> line(system.nVars + 1, 0);
           line[i] = 1;
           line[j] = -1;
-          line[system.nVars] = Rational<T>(T(cplex.getObjValue()));
+          line[system.nVars] = -ceilNum(cplex.getObjValue());
           result.lines.push_back(line);
         }
 
@@ -632,7 +655,7 @@ struct System {
           std::vector<Rational<T>> line(system.nVars + 1, 0);
           line[i] = -1;
           line[j] = 1;
-          line[system.nVars] = Rational<T>(T(cplex.getObjValue()));
+          line[system.nVars] = -ceilNum(cplex.getObjValue());
           result.lines.push_back(line);
         }
       }
@@ -641,6 +664,18 @@ struct System {
     env.end();
     result.nLines = result.lines.size();
     return true;
+  }
+
+  static Rational<T> floorNum(double n, unsigned p = 10) {
+    T de = 1 << p;
+    T nu = std::floor(n * de);
+    return Rational<T>(nu, de);
+  }
+
+  static Rational<T> ceilNum(double n, unsigned p = 10) {
+    T de = 1 << p;
+    T nu = std::ceil(n * de);
+    return Rational<T>(nu, de);
   }
 };
 
