@@ -466,7 +466,7 @@ struct System {
     return std::make_pair(true, varBounds);
   }
 
-  void printOA(std::ostream &out, bool vanilla = false) {
+  void printFMOA(std::ostream &out, bool vanilla = false) {
     System<T> result;
     result.varLabels = varLabels;
     result.nVars = nVars;
@@ -479,6 +479,22 @@ struct System {
       r = vanillaFMOA(*this, result, varMap);
     else
       r = findOA_f(*this, result, varMap);
+    if (!r) {
+      out << "Infeasible!" << std::endl;
+    } else {
+      result.print(out);
+    }
+  }
+
+  void printLPOA(std::ostream &out) {
+    System<T> result;
+    result.varLabels = varLabels;
+    result.nVars = nVars;
+    std::map<std::string, unsigned> varMap;
+    for (unsigned i = 0; i < nVars; i++) {
+      varMap[varLabels[i]] = i;
+    }
+    bool r = findLPOA(*this, result, varMap);
     if (!r) {
       out << "Infeasible!" << std::endl;
     } else {
@@ -504,6 +520,126 @@ struct System {
         }
       }
     }
+    result.nLines = result.lines.size();
+    return true;
+  }
+
+  static bool findLPOA(const System<T> &system, System<T> &result,
+                       std::map<std::string, unsigned> varMap) {
+    IloEnv env;
+    IloModel model(env);
+    IloNumVarArray vars(env);
+    for (unsigned j = 0; j < system.nVars; j++) {
+      vars.add(IloNumVar(env, -IloInfinity, IloInfinity));
+    }
+    for (auto &line : system.lines) {
+      IloExpr expr(env);
+      for (unsigned k = 0; k < system.nVars; k++) {
+        double coeff = double(line[k].numerator) / double(line[k].denominator);
+        expr += coeff * vars[k];
+      }
+      double rhs = double(line[system.nVars].numerator) /
+                   double(line[system.nVars].denominator);
+      model.add(expr >= rhs);
+    }
+    IloObjective obj = IloMaximize(env, vars[0]);
+    model.add(obj);
+
+    IloCplex cplex(model);
+    cplex.setOut(env.getNullStream());
+    for (unsigned i = 0; i < system.nVars; i++) {
+      for (unsigned j = 0; j < system.nVars; j++) {
+        if (i == j) {
+          obj.setLinearCoef(vars[j], -1);
+        } else {
+          obj.setLinearCoef(vars[j], 0);
+        }
+      }
+      cplex.extract(model);
+      cplex.solve();
+
+      if (cplex.getStatus() == IloAlgorithm::Optimal) {
+        std::vector<Rational<T>> line(system.nVars + 1, 0);
+        line[i] = 1;
+        line[system.nVars] = Rational<T>(T(cplex.getObjValue()));
+        result.lines.push_back(line);
+      }
+
+      obj.setLinearCoef(vars[i], 1);
+      cplex.extract(model);
+      cplex.solve();
+
+      if (cplex.getStatus() == IloAlgorithm::Optimal) {
+        std::vector<Rational<T>> line(system.nVars + 1, 0);
+        line[i] = -1;
+        line[system.nVars] = Rational<T>(T(cplex.getObjValue()));
+        result.lines.push_back(line);
+      }
+    }
+
+    for (unsigned i = 0; i < system.nVars; i++) {
+      for (unsigned j = i+1; j < system.nVars; j++) {
+        for (unsigned k = 0; k < system.nVars; k++) {
+          if (k == i || k == j) {
+            obj.setLinearCoef(vars[k], -1);
+          } else {
+            obj.setLinearCoef(vars[k], 0);
+          }
+        }
+        cplex.extract(model);
+        cplex.solve();
+
+        if (cplex.getStatus() == IloAlgorithm::Optimal) {
+          std::vector<Rational<T>> line(system.nVars + 1, 0);
+          line[i] = 1;
+          line[j] = 1;
+          line[system.nVars] = Rational<T>(T(cplex.getObjValue()));
+          result.lines.push_back(line);
+        }
+
+        obj.setLinearCoef(vars[j], 1);
+        obj.setLinearCoef(vars[j], 1);
+        cplex.extract(model);
+        cplex.solve();
+
+        if (cplex.getStatus() == IloAlgorithm::Optimal) {
+          std::vector<Rational<T>> line(system.nVars + 1, 0);
+          line[i] = -1;
+          line[j] = -1;
+          line[system.nVars] = Rational<T>(T(cplex.getObjValue()));
+          result.lines.push_back(line);
+        }
+
+        obj.setLinearCoef(vars[j], -1);
+        obj.setLinearCoef(vars[j], 1);
+        cplex.extract(model);
+        cplex.solve();
+
+        if (cplex.getStatus() == IloAlgorithm::Optimal) {
+          std::vector<Rational<T>> line(system.nVars + 1, 0);
+          line[i] = 1;
+          line[j] = -1;
+          line[system.nVars] = Rational<T>(T(cplex.getObjValue()));
+          result.lines.push_back(line);
+        }
+
+        obj.setLinearCoef(vars[j], 1);
+        obj.setLinearCoef(vars[j], -1);
+        cplex.extract(model);
+        cplex.solve();
+
+        if (cplex.getStatus() == IloAlgorithm::Optimal) {
+          std::vector<Rational<T>> line(system.nVars + 1, 0);
+          line[i] = -1;
+          line[j] = 1;
+          line[system.nVars] = Rational<T>(T(cplex.getObjValue()));
+          result.lines.push_back(line);
+        }
+      }
+    }
+
+    env.end();
+    result.nLines = result.lines.size();
     return true;
   }
 };

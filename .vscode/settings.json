@@ -36,6 +36,11 @@
         "typeinfo": "cpp",
         "utility": "cpp",
         "numeric": "cpp",
-        "cassert": "cpp"
+        "cassert": "cpp",
+        "strstream": "cpp",
+        "cstdarg": "cpp",
+        "cstring": "cpp",
+        "ctime": "cpp",
+        "iomanip": "cpp"
     }
 }
