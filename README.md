@@ -44,4 +44,4 @@ The input polyhedron must be provided in the PolyLib/FMLib format.
 ## Running the program
 The program accepts a polyhedron as input from the standard input and sends its UTVPI overapproximation as output to the standard output.
 
-The executable (named `utvpi-oa` for FM1/FM2/CPLEX LP0 and `lp-pip` for PIPLib LP0) can be found in after `make` in the `build` directory.
+The executable (named `utvpi-oa` for FM1/FM2/CPLEX LP0 and `lp-pip` for PIPLib LP0) can be found after `make` in the `build` directory.
